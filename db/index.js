@@ -2,7 +2,6 @@ const { Client } = require('pg');
 const client = new Client('postgres://localhost:5432/juicebox-dev');
 
 
-
 async function getAllUsers() {
     const { rows } = await client.query(
         `SELECT id, username, name, location, ACTIVE FROM users;`
@@ -16,6 +15,8 @@ async function createPost({
     content,
     tags = []
 }) {
+   const { authorid, title, content, tags} = createPost
+
      try {    const { rows: [ post ] } = await client.query (
         `INSERT INTO posts("authorid", title, content)
     VALUES ($1, $2, $3)
@@ -89,22 +90,48 @@ async function updateUser(id, fields = {}) {
    }
 
    async function updatePost(id, fields = {}) {
+
+    const { tags } = fields;
+    delete fields.tags
+
+
     const setString = Object.keys(fields).map(
         (key, index) => `"${ key }"=$${ index + 1 }`).join(', ');
+        
     
     if(setString.length === 0) {
         return;
     }
    
     try {
-        const {rows: [post]} = await client.query(`
-        UPDATE posts
-        SET ${ setString }
-        WHERE id=${ id }
-        RETURNING *;
-      `, Object.values(fields));
+      if (setString.length > 0) {
+        await client.query(`
+          UPDATE posts
+          SET ${ setString }
+          WHERE id=${ postId }
+          RETURNING *;
+        `, Object.values(fields));
+      }
+  
+       if (tags === undefined) {
+         return await getPostId(postId);
+       }
+
+       const tagList = await createTags(tags);
+       const tagListIdString = tagList.map(
+         tag => `${ tag.id }`
+       ).join(', ');
+
+       await client.query(`
+      DELETE FROM post_tags
+      WHERE "tagId"
+      NOT IN (${ tagListIdString })
+      AND "postId"=$1;
+    `, [postId]);
+
+     await addTagsToPost(postId, tagList);
    
-      return post;
+      return await getPostById(postId);
     } catch (error) {
         console.log("fialed to update post")
        throw error;
@@ -203,6 +230,15 @@ async function addTagsToPost(postId, tagList) {
 }
 
 async function getPostById(postId) {
+
+
+  if (!post) {
+    throw {
+      name: "PostNotFoundError",
+      message: "Could not find a post with that postId"
+    };
+  }
+  
   try {
     const { rows: [ post ]  } = await client.query(`
       SELECT *
@@ -234,9 +270,40 @@ async function getPostById(postId) {
   }
 }
 
+async function getAllTags() {
+  try {
+    const { rows } = await client.query(`
+    SELECT * FROM tags;
+    `);
+
+    
+
+
+    return rows;
+  } catch (error) {
+    throw error;
+  }
+
+}
+
+async function getUserByUsername(username) {
+  try {
+    const { rows: [user] } = await client.query(`
+      SELECT *
+      FROM users
+      WHERE username=$1;
+    `, [username]);
+
+    return user;
+  } catch (error) {
+    throw error;
+  }
+}
+
+
 
 module.exports = {
     client, getAllUsers, createUser, updateUser, createPost,updatePost,
     getAllPosts,
-    getPostsByUser, getUserById, createTags, addTagsToPost, getPostById, addTagsToPost
+    getPostsByUser, getUserById, createTags, addTagsToPost, getPostById, addTagsToPost, getAllTags, getUserByUsername
 };

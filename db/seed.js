@@ -122,6 +122,24 @@ async function createTables() {
     }
 }
 
+async function getPostsByTagName(tagName) {
+  try {
+    const { rows: postIds } = await client.query(`
+      SELECT posts.id
+      FROM posts
+      JOIN post_tags ON posts.id=post_tags."postId"
+      JOIN tags ON tags.id=post_tags."tagId"
+      WHERE tags.name=$1;
+    `, [tagName]);
+
+    return await Promise.all(postIds.map(
+      post => getPostById(post.id)
+    ));
+  } catch (error) {
+    throw error;
+  }
+} 
+
 
 
 async function rebuildDB() {
@@ -151,6 +169,9 @@ async function testDB() {
         name: "Newname Sogood",
         location: "Lesterville, KY"
       });
+      console.log("Calling getPostsByTagName with #happy");
+      const postsWithHappy = await getPostsByTagName("#happy");
+      console.log("Result:", postsWithHappy);
       console.log("Result:", updateUserResult);
   
       console.log("Calling getAllPosts");
@@ -167,6 +188,12 @@ async function testDB() {
       console.log("Calling getUserById with 1");
       const albert = await getUserById(1);
       console.log("Result:", albert);
+
+      console.log("Calling updatePost on posts[1], only updating tags");
+    const updatePostTagsResult = await updatePost(posts[1].id, {
+      tags: ["#youcandoanything", "#redfish", "#bluefish"]
+    });
+    console.log("Result:", updatePostTagsResult);
   
       console.log("Finished database tests!");
     } catch (error) {
@@ -174,6 +201,9 @@ async function testDB() {
       throw error;
     }
   }
+
+
+
 
 rebuildDB()
   .then(testDB)
